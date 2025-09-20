@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Gesture Recognition</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤚 Hand Gesture Recognition</h1>
+            <p>Upload an image or use your camera to recognize hand gestures (0-9)</p>
+        </header>
+
+        <main>
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-content">
+                        <div class="upload-icon">📷</div>
+                        <h3>Upload Image</h3>
+                        <p>Click to select an image or drag and drop</p>
+                        <input type="file" id="fileInput" accept="image/*" hidden>
+                    </div>
+                </div>
+                
+                <div class="camera-section">
+                    <button id="cameraBtn" class="camera-btn">📸 Use Camera</button>
+                    <video id="video" autoplay muted hidden></video>
+                    <canvas id="canvas" hidden></canvas>
+                    <button id="captureBtn" class="capture-btn" hidden>Capture Photo</button>
+                </div>
+            </div>
+
+            <div class="preview-section" id="previewSection" hidden>
+                <h3>Image Preview</h3>
+                <img id="previewImage" alt="Preview">
+                <button id="predictBtn" class="predict-btn">🔍 Predict Gesture</button>
+                <button id="clearBtn" class="clear-btn">🗑️ Clear</button>
+            </div>
+
+            <div class="result-section" id="resultSection" hidden>
+                <h3>Prediction Result</h3>
+                <div class="result-card">
+                    <div class="predicted-number" id="predictedNumber">-</div>
+                    <div class="confidence" id="confidence">Confidence: -</div>
+                </div>
+                
+                <div class="probabilities" id="probabilities">
+                    <h4>All Probabilities:</h4>
+                    <div class="prob-grid" id="probGrid"></div>
+                </div>
+            </div>
+
+            <div class="loading" id="loading" hidden>
+                <div class="spinner"></div>
+                <p>Analyzing image...</p>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const uploadArea = document.getElementById('uploadArea');
+        const previewSection = document.getElementById('previewSection');
+        const previewImage = document.getElementById('previewImage');
+        const predictBtn = document.getElementById('predictBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const resultSection = document.getElementById('resultSection');
+        const loading = document.getElementById('loading');
+        const cameraBtn = document.getElementById('cameraBtn');
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureBtn = document.getElementById('captureBtn');
+
+        let currentImageData = null;
+
+        // File upload handling
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        // Camera handling
+        cameraBtn.addEventListener('click', startCamera);
+        captureBtn.addEventListener('click', capturePhoto);
+
+        // Clear button
+        clearBtn.addEventListener('click', clearAll);
+
+        // Predict button
+        predictBtn.addEventListener('click', predictGesture);
+
+        function handleFile(file) {
+            if (!file.type.startsWith('image/')) {
+                alert('Please select an image file.');
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentImageData = e.target.result;
+                previewImage.src = currentImageData;
+                previewSection.hidden = false;
+                resultSection.hidden = true;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.hidden = false;
+                captureBtn.hidden = false;
+                cameraBtn.hidden = true;
+            } catch (err) {
+                alert('Error accessing camera: ' + err.message);
+            }
+        }
+
+        function capturePhoto() {
+            const context = canvas.getContext('2d');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            context.drawImage(video, 0, 0);
+            
+            currentImageData = canvas.toDataURL('image/jpeg');
+            previewImage.src = currentImageData;
+            previewSection.hidden = false;
+            resultSection.hidden = true;
+            
+            // Stop camera
+            video.srcObject.getTracks().forEach(track => track.stop());
+            video.hidden = true;
+            captureBtn.hidden = true;
+            cameraBtn.hidden = false;
+        }
+
+        async function predictGesture() {
+            if (!currentImageData) {
+                alert('Please select or capture an image first.');
+                return;
+            }
+
+            loading.hidden = false;
+            predictBtn.disabled = true;
+
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ image: currentImageData })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    displayResult(result);
+                } else {
+                    alert('Error: ' + result.error);
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+            } finally {
+                loading.hidden = true;
+                predictBtn.disabled = false;
+            }
+        }
+
+        function displayResult(result) {
+            document.getElementById('predictedNumber').textContent = result.predicted_number;
+            document.getElementById('confidence').textContent = 
+                `Confidence: ${(result.confidence * 100).toFixed(1)}%`;
+
+            // Display all probabilities
+            const probGrid = document.getElementById('probGrid');
+            probGrid.innerHTML = '';
+            
+            for (let i = 0; i < 10; i++) {
+                const prob = result.all_probabilities[i.toString()];
+                const probBar = document.createElement('div');
+                probBar.className = 'prob-item';
+                probBar.innerHTML = `
+                    <span class="number">${i}</span>
+                    <div class="prob-bar">
+                        <div class="prob-fill" style="width: ${prob * 100}%"></div>
+                    </div>
+                    <span class="prob-value">${(prob * 100).toFixed(1)}%</span>
+                `;
+                probGrid.appendChild(probBar);
+            }
+
+            resultSection.hidden = false;
+        }
+
+        function clearAll() {
+            currentImageData = null;
+            previewImage.src = '';
+            previewSection.hidden = true;
+            resultSection.hidden = true;
+            fileInput.value = '';
+            
+            // Stop camera if active
+            if (video.srcObject) {
+                video.srcObject.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+            }
+            video.hidden = true;
+            captureBtn.hidden = true;
+            cameraBtn.hidden = false;
+        }
+    </script>
+</body>
+</html>
