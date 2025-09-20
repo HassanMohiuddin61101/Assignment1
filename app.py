@@ -17,6 +17,7 @@ else:
     print(f"Model file {model_path} not found!")
     model = None
 
+
 def preprocess_image(image_data):
     """Preprocess image for model prediction"""
     try:
@@ -48,9 +49,11 @@ def preprocess_image(image_data):
         print(f"Error preprocessing image: {e}")
         return None
 
+
 @app.route('/')
 def index():
     return render_template('index.html')
+
 
 @app.route('/predict', methods=['POST'])
 def predict():
@@ -85,14 +88,15 @@ def predict():
             'confidence': confidence,
             'all_probabilities': class_probabilities
         })
-        
     except Exception as e:
         print(f"Error in prediction: {e}")
         return jsonify({'error': 'Prediction failed'}), 500
 
+
 @app.route('/health')
 def health():
     return jsonify({'status': 'healthy', 'model_loaded': model is not None})
+
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
