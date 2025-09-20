@@ -8,6 +8,7 @@ seaborn==0.12.2
 pandas==2.0.3
 pytest==7.1.2
 flake8==5.0.4
+prometheus-client==0.14.1
 
 
 
